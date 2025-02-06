@@ -15,7 +15,6 @@ async function fetchAllPosts() {
     const account = await accountResponse.json();
     const accountId = account.id;
 
-    // 2. 获取所有帖子
     let allPosts = [];
     let url = `${INSTANCE_URL}/api/v1/accounts/${accountId}/statuses`;
 
@@ -51,7 +50,6 @@ async function fetchAllPosts() {
       }
     return post_to_be_sync;
   } catch (error) {
-    // 错误处理
     console.error('Error:', error.message);
   }
 }
