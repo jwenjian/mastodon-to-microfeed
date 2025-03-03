@@ -2,6 +2,7 @@ const INSTANCE_URL = 'https://techhub.social';
 
 async function fetchAllPosts() {
   try {
+    // 1. 获取账户信息
     const accountResponse = await fetch(`${INSTANCE_URL}/api/v1/accounts/verify_credentials`, {
       headers: {
         'Authorization': `Bearer ${Deno.env.get("MASTODON_ACCESS_TOKEN")}`
@@ -9,12 +10,14 @@ async function fetchAllPosts() {
     });
 
     if (!accountResponse.ok) {
+      console.log('account credential wrong')
       throw new Error('Failed to fetch account information');
     }
 
     const account = await accountResponse.json();
     const accountId = account.id;
 
+    // 2. 获取所有帖子
     let allPosts = [];
     let url = `${INSTANCE_URL}/api/v1/accounts/${accountId}/statuses`;
 
@@ -25,6 +28,7 @@ async function fetchAllPosts() {
       });
 
       if (!postsResponse.ok) {
+        console.log('failed to fetch all posts')
         throw new Error('Failed to fetch posts');
       }
 
@@ -35,8 +39,8 @@ async function fetchAllPosts() {
         const element = posts[index];
         if (element.tags) {
           const ele_tags = element.tags;
-          for (let i = 0; index < ele_tags.length; index++) {
-            const tag = ele_tags[index];
+          for (let i = 0; i < ele_tags.length; i++) {
+            const tag = ele_tags[i];
             if (tag.name === "1link1day") {
               post_to_be_sync = element;
               found = true;
@@ -50,6 +54,7 @@ async function fetchAllPosts() {
       }
     return post_to_be_sync;
   } catch (error) {
+    // 错误处理
     console.error('Error:', error.message);
   }
 }
@@ -61,8 +66,19 @@ function parse_conent(mastodon_post) {
   let content = mastodon_post.content.substring(first_p + 4, last_p - 4)
   if (mastodon_post.media_attachments) {
     for(let i = 0; i < mastodon_post.media_attachments.length; i++) {
-      content += `<br/><img src="${mastodon_post.media_attachments[i].url}"/>
+      let media = mastodon_post.media_attachments[i];
+      if ('video' === media.type) {
+        content += `<br/><video src="${media.url}" cover="${media.preview_url}" width="100%" controls/>
       `
+      } else if ('image' === media.type) {
+        content += `<br/><img src="${media.url}"/>
+              `
+      } else {
+        // should be audio
+        content += `<br/><audio src="${media.url}"/>
+              `
+      }
+      
     }
   }
   let created_at = Date.now();
@@ -103,23 +119,21 @@ async function do_the_sync() {
     let kv = await Deno.openKv();
     let sync_status = await kv.get(["posts", the_post.id])
     if (sync_status.value === 'synced') {
-      return new Response('skip')
+      return new Response('synced')
     }
     if (the_post) {
       let sync_resp = await syncPost(the_post);
-      if (sync_resp.ok) {
-        await kv.set(["posts", the_post.id], "synced");
-      }
+      //if (sync_resp.ok) {
+        //await kv.set(["posts", the_post.id], "synced");
+      //}
       return new Response(JSON.stringify(the_post));
     }
     return new Response('ko')
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.url.indexOf("shuoshuo521") <= 0) {
+    return new Response('skip');
+  }
   return await do_the_sync();
-});
-
-Deno.cron("sync post every 1 minute", "*/1 * * * *", async () => {
-  let result = await do_the_sync();
-  console.log("cron job executed every 1 minutes: " + JSON.stringify(result));
 });
